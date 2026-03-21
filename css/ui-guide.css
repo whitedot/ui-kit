@@ -397,3 +397,20 @@ body {
     background-color: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(2px);
 }
+
+/* Dropdown visibility fallback */
+.ui-content-body .hs-dropdown-menu {
+    display: none;
+    opacity: 0;
+    visibility: hidden;
+    position: fixed;
+    left: 0;
+    top: 0;
+    margin-top: 0;
+}
+
+.ui-content-body :where(.hs-dropdown.hs-dropdown-open, .hs-dropdown.open) > .hs-dropdown-menu {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}

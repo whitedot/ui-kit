@@ -76,14 +76,27 @@
     return { toggle: toggle, menu: menu };
   }
 
+  function getAnchor(dropdown, refs) {
+    var splitGroup = refs && refs.toggle ? refs.toggle.closest('.dropdown-split') : null;
+    return splitGroup || (refs ? refs.toggle : null);
+  }
+
   function measure(menu) {
     var oldDisplay = menu.style.display;
     var oldVisibility = menu.style.visibility;
     var oldPointer = menu.style.pointerEvents;
+    var oldPosition = menu.style.position;
+    var oldLeft = menu.style.left;
+    var oldTop = menu.style.top;
+    var oldMarginTop = menu.style.marginTop;
 
     menu.style.display = 'block';
     menu.style.visibility = 'hidden';
     menu.style.pointerEvents = 'none';
+    menu.style.position = 'fixed';
+    menu.style.left = '0';
+    menu.style.top = '0';
+    menu.style.marginTop = '0';
 
     var result = {
       width: menu.offsetWidth,
@@ -93,6 +106,10 @@
     menu.style.display = oldDisplay;
     menu.style.visibility = oldVisibility;
     menu.style.pointerEvents = oldPointer;
+    menu.style.position = oldPosition;
+    menu.style.left = oldLeft;
+    menu.style.top = oldTop;
+    menu.style.marginTop = oldMarginTop;
 
     return result;
   }
@@ -172,31 +189,31 @@
     return ['bottom', 'top'];
   }
 
-  function getCandidatePosition(toggleRect, menuSize, side, align) {
-    var left = toggleRect.left;
-    var top = toggleRect.bottom + MENU_OFFSET;
+  function getCandidatePosition(anchorRect, menuSize, side, align) {
+    var left = anchorRect.left;
+    var top = anchorRect.bottom + MENU_OFFSET;
 
     if (side === 'top') {
-      top = toggleRect.top - menuSize.height - MENU_OFFSET;
+      top = anchorRect.top - menuSize.height - MENU_OFFSET;
     } else if (side === 'left') {
-      left = toggleRect.left - menuSize.width - MENU_OFFSET;
-      top = toggleRect.top;
+      left = anchorRect.left - menuSize.width - MENU_OFFSET;
+      top = anchorRect.top;
     } else if (side === 'right') {
-      left = toggleRect.right + MENU_OFFSET;
-      top = toggleRect.top;
+      left = anchorRect.right + MENU_OFFSET;
+      top = anchorRect.top;
     }
 
     if (side === 'top' || side === 'bottom') {
       if (align === 'end') {
-        left = toggleRect.right - menuSize.width;
+        left = anchorRect.right - menuSize.width;
       } else if (align === 'center') {
-        left = toggleRect.left + (toggleRect.width - menuSize.width) / 2;
+        left = anchorRect.left + (anchorRect.width - menuSize.width) / 2;
       }
     } else {
       if (align === 'end') {
-        top = toggleRect.bottom - menuSize.height;
+        top = anchorRect.bottom - menuSize.height;
       } else if (align === 'center') {
-        top = toggleRect.top + (toggleRect.height - menuSize.height) / 2;
+        top = anchorRect.top + (anchorRect.height - menuSize.height) / 2;
       }
     }
 
@@ -212,13 +229,13 @@
     return overflowLeft + overflowTop + overflowRight + overflowBottom;
   }
 
-  function choosePlacement(toggleRect, menuSize, placement, bounds) {
+  function choosePlacement(anchorRect, menuSize, placement, bounds) {
     var sides = getSideCandidates(placement.side);
     var best = null;
 
     for (var i = 0; i < sides.length; i += 1) {
       var side = sides[i];
-      var position = getCandidatePosition(toggleRect, menuSize, side, placement.align);
+      var position = getCandidatePosition(anchorRect, menuSize, side, placement.align);
       var score = getOverflowScore(position, menuSize, bounds) + (i > 0 ? 1 : 0);
 
       if (!best || score < best.score) {
@@ -233,8 +250,8 @@
 
     return best || {
       side: placement.side,
-      left: toggleRect.left,
-      top: toggleRect.bottom + MENU_OFFSET
+      left: anchorRect.left,
+      top: anchorRect.bottom + MENU_OFFSET
     };
   }
 
@@ -246,11 +263,17 @@
 
     var config = getConfig(dropdown);
     var placement = normalizePlacement(config.placement);
+    var anchor = getAnchor(dropdown, refs);
+    var anchorRect = anchor ? anchor.getBoundingClientRect() : refs.toggle.getBoundingClientRect();
+    var computedMenuStyles = window.getComputedStyle ? window.getComputedStyle(refs.menu) : null;
+    var configuredMinWidth = computedMenuStyles ? parseFloat(computedMenuStyles.minWidth) : 0;
+    var targetMinWidth = Math.max(anchorRect.width, configuredMinWidth || 0, 120);
+
+    refs.menu.style.minWidth = targetMinWidth + 'px';
 
     var menuSize = measure(refs.menu);
-    var toggleRect = refs.toggle.getBoundingClientRect();
     var bounds = getViewportBounds();
-    var selected = choosePlacement(toggleRect, menuSize, placement, bounds);
+    var selected = choosePlacement(anchorRect, menuSize, placement, bounds);
 
     var maxLeft = bounds.right - menuSize.width;
     var maxTop = bounds.bottom - menuSize.height;
@@ -263,7 +286,7 @@
     refs.menu.style.position = 'fixed';
     refs.menu.style.left = safeLeft + 'px';
     refs.menu.style.top = safeTop + 'px';
-    refs.menu.style.minWidth = Math.max(toggleRect.width, 120) + 'px';
+    refs.menu.style.marginTop = '0';
     refs.menu.style.maxWidth = availableWidth + 'px';
     refs.menu.style.maxHeight = availableHeight + 'px';
     refs.menu.style.overflowY = menuSize.height > availableHeight ? 'auto' : '';
@@ -279,6 +302,25 @@
     refs.menu.setAttribute('aria-hidden', expanded ? 'false' : 'true');
   }
 
+  function syncVisibility(dropdown, expanded) {
+    var refs = getRefs(dropdown);
+    if (!refs) {
+      return;
+    }
+
+    refs.menu.style.position = 'fixed';
+    refs.menu.style.marginTop = '0';
+
+    if (expanded) {
+      refs.menu.style.left = refs.menu.style.left || '0px';
+      refs.menu.style.top = refs.menu.style.top || '0px';
+    }
+
+    refs.menu.style.display = expanded ? 'block' : 'none';
+    refs.menu.style.opacity = expanded ? '1' : '0';
+    refs.menu.style.visibility = expanded ? 'visible' : 'hidden';
+  }
+
   function closeDropdown(dropdown) {
     if (!dropdown || !dropdown.classList.contains(OPEN_CLASS)) {
       return;
@@ -287,6 +329,7 @@
     dropdown.classList.remove(OPEN_CLASS);
     dropdown.classList.remove(LEGACY_OPEN_CLASS);
     syncAria(dropdown, false);
+    syncVisibility(dropdown, false);
     dropdown.dispatchEvent(new CustomEvent('ui.dropdown.close'));
 
     opened = opened.filter(function (item) {
@@ -311,6 +354,7 @@
     dropdown.classList.add(OPEN_CLASS);
     dropdown.classList.add(LEGACY_OPEN_CLASS);
     syncAria(dropdown, true);
+    syncVisibility(dropdown, true);
     place(dropdown);
 
     if (opened.indexOf(dropdown) === -1) {
@@ -367,6 +411,7 @@
 
     dropdown._dropdownBound = true;
     syncAria(dropdown, false);
+    syncVisibility(dropdown, false);
 
     var config = getConfig(dropdown);
 
